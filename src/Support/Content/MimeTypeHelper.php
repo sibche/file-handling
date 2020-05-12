@@ -3,9 +3,11 @@ namespace Czim\FileHandling\Support\Content;
 
 use Czim\FileHandling\Contracts\Support\MimeTypeHelperInterface;
 use finfo;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\File\MimeType\ExtensionGuesserInterface;
 use Symfony\Component\HttpFoundation\File\MimeType\MimeTypeExtensionGuesser;
 use Symfony\Component\HttpFoundation\File\MimeType\MimeTypeGuesser;
+use Symfony\Component\Mime\MimeTypes;
 
 /**
  * Class MimeTypeHelper
@@ -28,6 +30,11 @@ class MimeTypeHelper implements MimeTypeHelperInterface
      */
     public function guessMimeTypeForPath($path)
     {
+        if (class_exists(MimeTypes::class)) {
+            return (new MimeTypes())->guessMimeType($path);
+        }
+
+        // Deprecated, but kept as backwards compatibility fallback for now.
         return MimeTypeGuesser::getInstance()->guess($path);
     }
 
@@ -72,7 +79,21 @@ class MimeTypeHelper implements MimeTypeHelperInterface
      */
     public function guessExtensionForMimeType($type)
     {
-        return static::getMimeTypeExtensionGuesserInstance()->guess($type);
+        if (class_exists(MimeTypes::class)) {
+            $extensions = (new MimeTypes())->getExtensions($type);
+
+            if (count($extensions)) {
+                return head($extensions);
+            }
+
+            return '';
+        }
+
+        if (static::$mimeTypeExtensionGuesser !== null) {
+            return static::getMimeTypeExtensionGuesserInstance()->guess($type);
+        }
+
+        throw new RuntimeException('Unable to guess, no extension guessin strategy available');
     }
 
     /**
@@ -82,11 +103,10 @@ class MimeTypeHelper implements MimeTypeHelperInterface
      */
     public static function getMimeTypeExtensionGuesserInstance()
     {
-        if ( ! static::$mimeTypeExtensionGuesser) {
+        if ( ! static::$mimeTypeExtensionGuesser && class_exists(MimeTypeExtensionGuesser::class)) {
             static::$mimeTypeExtensionGuesser = new MimeTypeExtensionGuesser;
         }
 
         return static::$mimeTypeExtensionGuesser;
     }
-
 }
